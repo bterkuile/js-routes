@@ -125,8 +125,8 @@ class JsRoutes
   def js_routes
     Rails.application.reload_routes!
     js_routes = Rails.application.routes.named_routes.routes.sort_by(&:to_s).map do |_, route|
-      if route.app.respond_to?(:superclass) && route.app.superclass == Rails::Engine
-        route.app.routes.named_routes.map do |_, engine_route|
+      if route.app.respond_to?(:app) && route.app.app.respond_to?(:superclass) && route.app.app.superclass == Rails::Engine
+        route.app.app.routes.named_routes.map do |_, engine_route|
           build_route_if_match(engine_route, route)
         end
       else
