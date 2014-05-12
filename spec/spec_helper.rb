@@ -5,17 +5,30 @@ $:.unshift(File.dirname(__FILE__))
 require 'rspec'
 require 'rails/all'
 require 'js-routes'
-require "v8"
-require "cgi"
 require "active_support/core_ext/hash/slice"
 require 'coffee-script'
-
-def jscontext
-  @context ||= V8::Context.new
+if defined?(JRUBY_VERSION)
+  require 'rhino'
+  JS_LIB_CLASS = Rhino
+else
+  require "v8"
+  JS_LIB_CLASS = V8
 end
 
-def evaljs(string)
-  jscontext.eval(string)
+def jscontext(force = false)
+  if force
+    @jscontext = JS_LIB_CLASS::Context.new
+  else
+    @jscontext ||= JS_LIB_CLASS::Context.new
+  end
+end
+
+def js_error_class
+  JS_LIB_CLASS::JSError
+end
+
+def evaljs(string, force = false)
+  jscontext(force).eval(string)
 end
 
 def routes
@@ -38,21 +51,33 @@ end
 class App < Rails::Application
   # Enable the asset pipeline
   config.assets.enabled = true
+  # initialize_on_precompile
+  config.assets.initialize_on_precompile = true
+
+  if 3 == Rails::VERSION::MAJOR
+    config.paths['config/routes'] << 'spec/config/routes.rb'
+  else
+    config.paths['config/routes.rb'] << 'spec/config/routes.rb'
+  end
 end
 
 def draw_routes
 
   BlogEngine::Engine.routes.draw do
+    root to: "application#index"
     resources :posts
   end
   App.routes.draw do
+
+    get 'support(/page/:page)', to: BlogEngine::Engine, as: 'support'
+
     resources :inboxes do
       resources :messages do
         resources :attachments
       end
     end
 
-    root :to => "inboxes#index" 
+    root :to => "inboxes#index"
 
     namespace :admin do
       resources :users
@@ -79,6 +104,7 @@ def draw_routes
     get '/json_only' => "foo#foo", :format => true, :constraints => {:format => /json/}, :as => :json_only
 
     get '/привет' => "foo#foo", :as => :hello
+    get '(/o/:organization)/search/:q' => "foo#foo", as: :search
   end
 
 end
@@ -91,14 +117,10 @@ Rails.configuration.active_support.deprecation = :log
 Dir["#{File.dirname(__FILE__)}/support/**/*.rb"].each {|f| require f}
 
 RSpec.configure do |config|
-
-  config.before(:each) do
-    evaljs("var window = this;")
-    # No need to replace native V8 functions for now
-    #jscontext[:cgi] = CGI
-    #evaljs("function encodeURIComponent(string) {return cgi.escape(string);}")
-    jscontext[:log] = lambda {|context, value| puts value.inspect}
+  config.expect_with :rspec do |c|
+    c.syntax = :expect
   end
+
   config.before(:all) do
     # compile all js files begin
     Dir["#{File.expand_path(File.join(File.dirname(__FILE__), "..", "lib"))}/**/*.coffee"].each do |coffee|
@@ -106,5 +128,10 @@ RSpec.configure do |config|
     end
     # compile all js files end
     draw_routes
+  end
+
+  config.before :each do
+    evaljs("var window = this;", true)
+    jscontext[:log] = lambda {|context, value| puts value.inspect}
   end
 end

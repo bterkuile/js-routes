@@ -15,12 +15,12 @@ describe JsRoutes do
     it "should have correct function with arguments signature" do
       should include("inbox_message_path: function(_inbox_id, _id, options)")
     end
-    it "should have correct function signature with Ruby 1.8.7 and unordered hash" do
+    it "should have correct function signature with unordered hash" do
       should include("inbox_message_attachment_path: function(_inbox_id, _message_id, _id, options)")
     end
 
     it "routes should be sorted in alphabetical order" do
-      subject.index("book_path").should <= subject.index("inboxes_path")
+      expect(subject.index("book_path")).to be <= subject.index("inboxes_path")
     end
   end
 
@@ -39,7 +39,7 @@ describe JsRoutes do
       if Rails.application.instance_variable_get("@initialized")
         pending
       end
-      File.exists?(name).should be_false
+      expect(File.exists?(name)).to be_false
     end
 
     after(:all) do

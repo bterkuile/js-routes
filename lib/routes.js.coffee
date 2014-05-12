@@ -36,13 +36,12 @@ Utils =
   clean_path: (path) ->
     path = path.split("://")
     last_index = path.length - 1
-    path[last_index] = path[last_index].replace(/\/+/g, "/").replace(/.\/$/m, "")
+    path[last_index] = path[last_index].replace(/\/+/g, "/")
     path.join "://"
 
   set_default_url_options: (optional_parts, options) ->
-    for part, i in optional_parts
-      if not options.hasOwnProperty(part) and defaults.default_url_options.hasOwnProperty(part)
-        options[part] = defaults.default_url_options[part]
+    for part, i in optional_parts when (not options.hasOwnProperty(part) and defaults.default_url_options.hasOwnProperty(part))
+      options[part] = defaults.default_url_options[part]
 
   extract_anchor: (options) ->
     anchor = ""
@@ -52,18 +51,30 @@ Utils =
     anchor
 
   extract_options: (number_of_params, args) ->
-    ret_value = {}
-    if args.length > number_of_params
-      ret_value = args.pop()
-    ret_value
+    last_el = args[args.length - 1]
+    if args.length > number_of_params or (last_el? and "object" is @get_object_type(last_el) and !@look_like_serialized_model(last_el))
+      args.pop()
+    else
+      {}
+
+  look_like_serialized_model: (object) ->
+    # consider object a model if it have a path identifier properties like id and to_param
+    "id" of object or "to_param" of object
+
 
   path_identifier: (object) ->
     return "0"  if object is 0
     # null, undefined, false or ''
-    return ""  unless object
+    return "" unless object
     property = object
     if @get_object_type(object) is "object"
-      property = object.to_param or object.id or object
+      if "to_param" of object
+        property = object.to_param
+      else if "id" of object
+        property = object.id
+      else
+        property = object
+
       property = property.call(object) if @get_object_type(property) is "function"
     property.toString()
 
@@ -75,7 +86,8 @@ Utils =
 
   prepare_parameters: (required_parameters, actual_parameters, options) ->
     result = @clone(options) or {}
-    result[val] = actual_parameters[i] for val, i in required_parameters
+    for val, i in required_parameters when i < actual_parameters.length
+      result[val] = actual_parameters[i]
     result
 
   build_path: (required_parameters, optional_parts, route, args) ->
@@ -141,6 +153,8 @@ Utils =
   #
   visit_globbing: (route, parameters, optional) ->
     [type, left, right] = route
+    # fix for rails 4 globbing
+    route[1] = left = left.replace(/^\*/i, "") if left.replace(/^\*/i, "") isnt left
     value = parameters[left]
     return @visit(route, parameters, optional) unless value?
     parameters[left] = switch @get_object_type(value)
@@ -187,13 +201,13 @@ Utils =
   _classToType: ->
     return @_classToTypeCache if @_classToTypeCache?
     @_classToTypeCache = {}
-    for name in "Boolean Number String Function Array Date RegExp Undefined Null".split(" ")
-      @_classToTypeCache["[object " + name + "]"] = name.toLowerCase()
+    for name in "Boolean Number String Function Array Date RegExp Object Error".split(" ")
+      @_classToTypeCache["[object #{name}]"] = name.toLowerCase()
     @_classToTypeCache
   get_object_type: (obj) ->
     return window.jQuery.type(obj) if window.jQuery and window.jQuery.type?
-    strType = Object::toString.call(obj)
-    @_classToType()[strType] or "object"
+    return "#{obj}" unless obj?
+    (if typeof obj is "object" or typeof obj is "function" then @_classToType()[Object::toString.call(obj)] or "object" else typeof obj)
 
   namespace: (root, namespaceString) ->
     parts = (if namespaceString then namespaceString.split(".") else [])
